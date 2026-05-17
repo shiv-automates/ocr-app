@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Processing - ShivAutomates VisionAI OCR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); }
+        .dragover { border-color: #c084fc !important; background: rgba(192, 132, 252, 0.1) !important; }
+        .loader-spinner { border-top-color: #c084fc; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="min-h-screen relative p-4 md:p-8 antialiased">
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="absolute -top-40 right-0 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20"></div>
+        <div class="absolute bottom-0 -left-20 w-96 h-96 bg-pink-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20"></div>
+    </div>
+
+    <div class="max-w-4xl mx-auto relative z-10">
+        <nav class="mb-8">
+            <a href="/" class="inline-flex items-center text-sm font-medium text-slate-400 hover:text-white transition-colors group">
+                <svg class="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Back to Home
+            </a>
+        </nav>
+
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight text-white">Bulk Processing</h1>
+            <p class="text-slate-400 max-w-xl mx-auto">Upload multiple register pages. The AI will process them collectively and generate a single, comprehensive Excel file for download.</p>
+        </header>
+
+        <div class="glass-card rounded-3xl p-6 md:p-10 shadow-2xl shadow-purple-900/20">
+            
+            <!-- Upload Area -->
+            <div id="dropZone" class="rounded-2xl border-2 border-dashed border-slate-600/50 hover:border-purple-500/50 hover:bg-slate-800/50 transition-all duration-300 p-10 flex flex-col items-center justify-center text-center cursor-pointer mb-6">
+                <input type="file" id="fileInput" accept="image/*" multiple class="hidden">
+                <div class="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center mb-4 border border-slate-700 shadow-inner group-hover:scale-110 transition-transform">
+                    <svg class="w-10 h-10 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                </div>
+                <h3 class="text-xl font-medium text-slate-200 mb-2">Select multiple files</h3>
+                <p class="text-sm text-slate-400">Click or drag & drop. Supports JPEG, PNG.</p>
+            </div>
+
+            <!-- File List -->
+            <div id="fileListContainer" class="hidden mb-6">
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">Selected Files (<span id="fileCount">0</span>)</h4>
+                    <button id="clearFiles" class="text-xs text-slate-400 hover:text-white transition-colors">Clear All</button>
+                </div>
+                <div id="fileList" class="flex flex-wrap gap-3 max-h-48 overflow-y-auto scrollbar-hide">
+                    <!-- Files injected here -->
+                </div>
+            </div>
+
+            <!-- Action Button -->
+            <button id="processBtn" class="w-full py-4 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 text-white font-semibold shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:from-purple-400 hover:to-pink-500 transition-all duration-300 transform active:scale-[0.98] hidden flex items-center justify-center text-lg">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Process All Images
+            </button>
+
+            <!-- Loading State -->
+            <div id="loader" class="hidden py-12 flex flex-col items-center justify-center">
+                <div class="w-16 h-16 border-4 border-slate-700 border-t-purple-500 rounded-full loader-spinner mb-6"></div>
+                <h3 class="text-xl font-medium text-slate-200 mb-2">Processing Batch...</h3>
+                <p class="text-slate-400 text-center max-w-sm">Extracting data from <span id="progressText" class="font-bold text-white">0 / 0</span> images. Please keep this tab open.</p>
+            </div>
+
+            <!-- Results State -->
+            <div id="results" class="hidden mt-8 pt-8 border-t border-white/10 text-center">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 mb-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-6">Processing Complete</h3>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="summary">
+                    <!-- Summary injected here -->
+                </div>
+
+                <a id="downloadBtn" href="#" download class="inline-flex items-center justify-center px-8 py-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-300 transform active:scale-[0.98] text-lg">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Download Excel Report
+                </a>
+
+                <div id="errors" class="hidden mt-8 text-left bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+                    <h4 class="text-red-400 font-semibold flex items-center mb-3">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                        Errors encountered
+                    </h4>
+                    <ul id="errorList" class="text-sm text-red-300/80 space-y-1 list-disc list-inside"></ul>
+                </div>
+            </div>
+
+            <!-- Global Error -->
+            <div id="errorBox" class="hidden mt-6 bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm text-center"></div>
+
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileListContainer = document.getElementById('fileListContainer');
+        const fileList = document.getElementById('fileList');
+        const fileCount = document.getElementById('fileCount');
+        const clearFilesBtn = document.getElementById('clearFiles');
+        const processBtn = document.getElementById('processBtn');
+        const loader = document.getElementById('loader');
+        const progressText = document.getElementById('progressText');
+        const results = document.getElementById('results');
+        const summary = document.getElementById('summary');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const errorsDiv = document.getElementById('errors');
+        const errorList = document.getElementById('errorList');
+        const errorBox = document.getElementById('errorBox');
+
+        let files = [];
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+        clearFilesBtn.addEventListener('click', () => {
+            files = [];
+            fileInput.value = '';
+            fileListContainer.classList.add('hidden');
+            processBtn.classList.add('hidden');
+            results.classList.add('hidden');
+            errorBox.classList.add('hidden');
+        });
+
+        function handleFiles(fileCollection) {
+            const newFiles = Array.from(fileCollection).filter(f => f.type.startsWith('image/'));
+            if (!newFiles.length) { showError('No valid image files selected. Please upload JPEG or PNG.'); return; }
+            files = [...files, ...newFiles];
+            renderFileList();
+            processBtn.classList.remove('hidden');
+            results.classList.add('hidden');
+            errorBox.classList.add('hidden');
+        }
+
+        function renderFileList() {
+            fileList.innerHTML = '';
+            fileCount.textContent = files.length;
+            files.forEach((f, i) => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center bg-slate-800/80 border border-white/5 rounded-lg px-3 py-2 text-sm';
+                div.innerHTML = `
+                    <svg class="w-4 h-4 text-purple-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <span class="truncate max-w-[150px] text-slate-300 mr-3" title="${f.name}">${f.name}</span>
+                    <span class="text-xs text-slate-500 mr-3">${(f.size/1024/1024).toFixed(1)} MB</span>
+                    <button class="ml-auto text-slate-500 hover:text-red-400 transition-colors" onclick="removeFile(${i})">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                `;
+                fileList.appendChild(div);
+            });
+            fileListContainer.classList.remove('hidden');
+        }
+
+        window.removeFile = function(index) {
+            files.splice(index, 1);
+            if (files.length === 0) {
+                clearFilesBtn.click();
+            } else {
+                renderFileList();
+            }
+        };
+
+        processBtn.addEventListener('click', async () => {
+            if (!files.length) return;
+            dropZone.classList.add('hidden');
+            fileListContainer.classList.add('hidden');
+            processBtn.classList.add('hidden');
+            loader.classList.remove('hidden');
+            results.classList.add('hidden');
+            errorBox.classList.add('hidden');
+            progressText.textContent = `0 / ${files.length}`;
+
+            const formData = new FormData();
+            files.forEach(f => formData.append('images', f));
+
+            try {
+                const res = await fetch('/api/bulk', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Unknown error');
+                renderResults(data);
+            } catch (err) {
+                showError(err.message);
+                dropZone.classList.remove('hidden');
+                fileListContainer.classList.remove('hidden');
+                processBtn.classList.remove('hidden');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        });
+
+        function renderResults(data) {
+            summary.innerHTML = `
+                <div class="bg-slate-800/50 rounded-2xl p-4 border border-white/5">
+                    <div class="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-1">Images</div>
+                    <div class="text-2xl font-bold text-white">${data.processed} <span class="text-sm font-normal text-slate-500">/ ${data.total_images}</span></div>
+                </div>
+                <div class="bg-slate-800/50 rounded-2xl p-4 border border-white/5">
+                    <div class="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-1">Rows Extracted</div>
+                    <div class="text-2xl font-bold text-white">${data.total_records}</div>
+                </div>
+                <div class="bg-slate-800/50 rounded-2xl p-4 border border-white/5">
+                    <div class="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-1">Tokens In</div>
+                    <div class="text-2xl font-bold text-white">${data.tokens_in}</div>
+                </div>
+                <div class="bg-slate-800/50 rounded-2xl p-4 border border-white/5">
+                    <div class="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-1">Tokens Out</div>
+                    <div class="text-2xl font-bold text-white">${data.tokens_out}</div>
+                </div>
+            `;
+            downloadBtn.href = data.download_url;
+            results.classList.remove('hidden');
+
+            if (data.errors && data.errors.length) {
+                errorList.innerHTML = '';
+                data.errors.forEach(e => {
+                    const li = document.createElement('li');
+                    li.textContent = `${e.file}: ${e.error}`;
+                    errorList.appendChild(li);
+                });
+                errorsDiv.classList.remove('hidden');
+            } else {
+                errorsDiv.classList.add('hidden');
+            }
+        }
+
+        function showError(msg) {
+            errorBox.innerHTML = `<div class="flex items-center justify-center"><svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>${msg}</div>`;
+            errorBox.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

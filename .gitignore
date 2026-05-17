@@ -1,0 +1,26 @@
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables (SENSITIVE - DO NOT COMMIT)
+.env
+
+# Local logs and temporary files
+errors.log
+*.log
+/tmp/
+
+# Excel sheets and temporary Excel locks
+*.xlsx
+~$*.xlsx
+
+# Vercel local configuration
+.vercel

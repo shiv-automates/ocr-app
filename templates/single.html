@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Single Image Test - ShivAutomates VisionAI OCR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #0f172a; color: #f8fafc; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1); }
+        .dragover { border-color: #818cf8 !important; background: rgba(129, 140, 248, 0.1) !important; }
+        .table-container::-webkit-scrollbar { height: 8px; width: 8px; }
+        .table-container::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        .loader-spinner { border-top-color: #818cf8; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen relative p-4 md:p-8 antialiased">
+    <!-- Background setup -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="absolute -top-40 -left-40 w-96 h-96 bg-indigo-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20"></div>
+        <div class="absolute top-40 -right-40 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20"></div>
+    </div>
+
+    <div class="max-w-6xl mx-auto relative z-10">
+        <nav class="mb-8">
+            <a href="/" class="inline-flex items-center text-sm font-medium text-slate-400 hover:text-white transition-colors group">
+                <svg class="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                Back to Home
+            </a>
+        </nav>
+
+        <header class="mb-10">
+            <h1 class="text-4xl font-bold mb-2 tracking-tight text-white">Single Image Analysis</h1>
+            <p class="text-slate-400">Upload a single register page to preview extraction results in real-time.</p>
+        </header>
+
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Left Column: Upload & Actions -->
+            <div class="lg:col-span-1 space-y-6">
+                <div id="dropZone" class="glass-card rounded-3xl border-2 border-dashed border-slate-600/50 hover:border-indigo-500/50 hover:bg-slate-800/50 transition-all duration-300 p-8 flex flex-col items-center justify-center text-center cursor-pointer min-h-[240px]">
+                    <input type="file" id="fileInput" accept="image/*" class="hidden">
+                    <div class="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mb-4 border border-slate-700 shadow-inner">
+                        <svg class="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    </div>
+                    <h3 class="text-lg font-medium text-slate-200 mb-1">Click or drag & drop</h3>
+                    <p class="text-sm text-slate-400">Supports JPEG, PNG formats</p>
+                </div>
+
+                <div id="preview" class="glass-card rounded-2xl p-4 hidden">
+                    <h4 class="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Image Preview</h4>
+                    <div class="relative rounded-xl overflow-hidden bg-black/50 aspect-[4/3] flex items-center justify-center border border-white/5">
+                        <img id="previewImg" src="" alt="Preview" class="max-w-full max-h-full object-contain">
+                    </div>
+                </div>
+
+                <button id="processBtn" class="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:from-indigo-400 hover:to-purple-500 transition-all duration-300 transform active:scale-[0.98] hidden flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    Extract Data
+                </button>
+
+                <div id="errorBox" class="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-sm hidden"></div>
+            </div>
+
+            <!-- Right Column: Results -->
+            <div class="lg:col-span-2 space-y-6">
+                <div id="loader" class="glass-card rounded-3xl p-12 flex flex-col items-center justify-center min-h-[400px] hidden border-indigo-500/20">
+                    <div class="w-16 h-16 border-4 border-slate-700 border-t-indigo-500 rounded-full loader-spinner mb-6"></div>
+                    <h3 class="text-xl font-medium text-slate-200 mb-2">Analyzing Register...</h3>
+                    <p class="text-slate-400 text-center max-w-sm">Our Vision AI is scanning handwritten text and structuring the data. This usually takes 10-30 seconds.</p>
+                </div>
+
+                <div id="emptyState" class="glass-card rounded-3xl p-12 flex flex-col items-center justify-center min-h-[400px] border-dashed">
+                    <div class="w-20 h-20 rounded-full bg-slate-800/50 flex items-center justify-center mb-6">
+                        <svg class="w-10 h-10 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    </div>
+                    <p class="text-slate-400">Upload an image and run extraction to see results here.</p>
+                </div>
+
+                <div id="results" class="glass-card rounded-3xl p-6 hidden overflow-hidden flex flex-col h-full max-h-[800px]">
+                    <div class="flex justify-between items-end mb-6">
+                        <div>
+                            <h3 class="text-xl font-bold text-white mb-1">Extracted Data</h3>
+                            <p class="text-sm text-slate-400">Review the structured output below</p>
+                        </div>
+                        <div id="stats" class="flex gap-4 text-xs font-medium text-slate-300">
+                            <!-- Stats injected here -->
+                        </div>
+                    </div>
+                    
+                    <div class="table-container flex-grow overflow-auto rounded-xl border border-white/5 bg-slate-900/50 relative">
+                        <table id="resultsTable" class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="bg-slate-800/80 text-slate-300 sticky top-0 z-10 backdrop-blur-sm">
+                                <!-- Headers injected here -->
+                            </thead>
+                            <tbody class="divide-y divide-white/5 text-slate-300">
+                                <!-- Rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('previewImg');
+        const processBtn = document.getElementById('processBtn');
+        const loader = document.getElementById('loader');
+        const emptyState = document.getElementById('emptyState');
+        const results = document.getElementById('results');
+        const resultsTable = document.getElementById('resultsTable');
+        const stats = document.getElementById('stats');
+        const errorBox = document.getElementById('errorBox');
+
+        let currentFile = null;
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+        fileInput.addEventListener('change', () => { if (fileInput.files.length) handleFile(fileInput.files[0]); });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) { showError('Please upload an image file.'); return; }
+            currentFile = file;
+            previewImg.src = URL.createObjectURL(file);
+            preview.classList.remove('hidden');
+            processBtn.classList.remove('hidden');
+            results.classList.add('hidden');
+            errorBox.classList.add('hidden');
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!currentFile) return;
+            loader.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+            processBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            processBtn.disabled = true;
+            results.classList.add('hidden');
+            errorBox.classList.add('hidden');
+
+            const formData = new FormData();
+            formData.append('image', currentFile);
+
+            try {
+                const res = await fetch('/api/single', { method: 'POST', body: formData });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Unknown error');
+                renderResults(data.records, data.tokens_in, data.tokens_out, data.download_url);
+            } catch (err) {
+                showError(err.message);
+                emptyState.classList.remove('hidden');
+            } finally {
+                loader.classList.add('hidden');
+                processBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                processBtn.disabled = false;
+            }
+        });
+
+        function renderResults(records, tokensIn, tokensOut, downloadUrl) {
+            if (!records.length) {
+                showError('No records extracted from this image.');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            const thead = resultsTable.querySelector('thead');
+            const tbody = resultsTable.querySelector('tbody');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            const cols = Object.keys(records[0]);
+            const trHead = document.createElement('tr');
+            cols.forEach(c => { 
+                const th = document.createElement('th'); 
+                th.className = 'px-4 py-3 font-semibold text-xs uppercase tracking-wider border-b border-white/10';
+                th.textContent = c.replace(/_/g, ' '); 
+                trHead.appendChild(th); 
+            });
+            thead.appendChild(trHead);
+
+            records.forEach(rec => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-white/5 transition-colors';
+                cols.forEach(c => { 
+                    const td = document.createElement('td'); 
+                    td.className = 'px-4 py-3 border-b border-white/5';
+                    
+                    if (c === 'confidence') {
+                        let badgeColor = 'bg-slate-500/20 text-slate-300';
+                        const val = (rec[c] || '').toLowerCase();
+                        if (val === 'high') badgeColor = 'bg-emerald-500/20 text-emerald-400';
+                        if (val === 'medium') badgeColor = 'bg-yellow-500/20 text-yellow-400';
+                        if (val === 'low') badgeColor = 'bg-red-500/20 text-red-400';
+                        
+                        td.innerHTML = `<span class="px-2 py-1 rounded text-xs font-medium ${badgeColor}">${rec[c] || '-'}</span>`;
+                    } else {
+                        td.textContent = rec[c] ?? '-'; 
+                    }
+                    tr.appendChild(td); 
+                });
+                tbody.appendChild(tr);
+            });
+
+            stats.innerHTML = `
+                <div class="px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 flex items-center"><span class="opacity-70 mr-1">Rows</span> <b>${records.length}</b></div>
+                <div class="px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 flex items-center"><span class="opacity-70 mr-1">In</span> <b>${tokensIn}</b></div>
+                <div class="px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 flex items-center"><span class="opacity-70 mr-1">Out</span> <b>${tokensOut}</b></div>
+                ${downloadUrl ? `<a href="${downloadUrl}" download class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg hover:from-emerald-400 hover:to-teal-400 transition-colors flex items-center ml-2"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Download</a>` : ''}
+            `;
+            results.classList.remove('hidden');
+            emptyState.classList.add('hidden');
+        }
+
+        function showError(msg) {
+            errorBox.innerHTML = `<div class="flex items-start"><svg class="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg><div>${msg}</div></div>`;
+            errorBox.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
