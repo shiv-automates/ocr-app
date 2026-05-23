@@ -219,6 +219,73 @@ def odoo_authenticate() -> tuple[int, object]:
     return uid, models
 
 
+NATIONALITY_MAP = {
+    "ind": "India", "in": "India", "indian": "India", "india": "India",
+    "aus": "Australia", "au": "Australia", "australia": "Australia", "australian": "Australia",
+    "usa": "United States", "us": "United States", "american": "United States", "united states": "United States",
+    "uk": "United Kingdom", "gb": "United Kingdom", "british": "United Kingdom", "britain": "United Kingdom",
+    "ger": "Germany", "de": "Germany", "german": "Germany", "germany": "Germany",
+    "bel": "Belgium", "be": "Belgium", "belgian": "Belgium", "belgium": "Belgium",
+    "fra": "France", "fr": "France", "french": "France", "france": "France",
+    "lat": "Latvia", "lv": "Latvia", "latvian": "Latvia", "latvia": "Latvia",
+    "nep": "Nepal", "np": "Nepal", "nepali": "Nepal", "nepal": "Nepal",
+    "lka": "Sri Lanka", "sl": "Sri Lanka", "srilankan": "Sri Lanka", "sri lanka": "Sri Lanka",
+    "pak": "Pakistan", "pk": "Pakistan", "pakistani": "Pakistan", "pakistan": "Pakistan",
+    "bgd": "Bangladesh", "bd": "Bangladesh", "bangladeshi": "Bangladesh", "bangladesh": "Bangladesh",
+    "chn": "China", "cn": "China", "chinese": "China", "china": "China",
+    "jpn": "Japan", "jp": "Japan", "japanese": "Japan", "japan": "Japan",
+    "tha": "Thailand", "th": "Thailand", "thai": "Thailand", "thailand": "Thailand",
+    "ita": "Italy", "it": "Italy", "italian": "Italy", "italy": "Italy",
+    "esp": "Spain", "es": "Spain", "spanish": "Spain", "spain": "Spain",
+    "nld": "Netherlands", "nl": "Netherlands", "dutch": "Netherlands", "netherlands": "Netherlands",
+    "rus": "Russia", "ru": "Russia", "russian": "Russia", "russia": "Russia",
+    "can": "Canada", "ca": "Canada", "canadian": "Canada",
+    "nz": "New Zealand", "nzl": "New Zealand", "new zealand": "New Zealand",
+}
+
+_country_cache: dict = {}
+
+
+def resolve_country_id(models: object, uid: int, nationality: str) -> int | None:
+    """Look up Odoo country ID from a nationality string (code, name, or adjective)."""
+    if not nationality or not nationality.strip():
+        return None
+    nat = nationality.strip().lower()
+
+    mapped = NATIONALITY_MAP.get(nat, nat)
+    mapped_lower = mapped.lower()
+
+    if mapped_lower in _country_cache:
+        return _country_cache[mapped_lower]
+
+    for search_val in [mapped, nationality.strip()]:
+        ids = models.execute_kw(
+            ODOO_DB, uid, ODOO_API_KEY,
+            "res.country", "search",
+            [[("name", "ilike", search_val)]],
+            {"limit": 1}
+        )
+        if ids:
+            _country_cache[mapped_lower] = ids[0]
+            return ids[0]
+
+    codes = [nat.upper()]
+    if len(nat) == 3:
+        codes.append(nat[:2].upper())
+    for code in codes:
+        ids = models.execute_kw(
+            ODOO_DB, uid, ODOO_API_KEY,
+            "res.country", "search",
+            [[("code", "in", [code])]],
+            {"limit": 1}
+        )
+        if ids:
+            _country_cache[mapped_lower] = ids[0]
+            return ids[0]
+
+    return None
+
+
 def get_or_create_odoo_source(models: object, uid: int) -> int:
     """Get or create the UTM source 'Hotel Register (OCR)' in Odoo."""
     domain = [[("name", "=", ODOO_SOURCE_NAME)]]
@@ -315,10 +382,22 @@ def sync_records_to_odoo(records: list[dict]) -> dict:
                 "description": build_lead_description(rec),
             }
 
-            # Optional: map address to street if present
+            # Map address to street if present
             address = str(rec.get("permanent_address", "")).strip()
             if address:
                 lead_vals["street"] = address
+
+            # Map nationality to country
+            nationality = str(rec.get("nationality", "")).strip()
+            if nationality:
+                country_id = resolve_country_id(models, uid, nationality)
+                if country_id:
+                    lead_vals["country_id"] = country_id
+
+            # Map arrival city/place
+            arrived_from = str(rec.get("from_where_lodger_arrived", "")).strip()
+            if arrived_from:
+                lead_vals["city"] = arrived_from
 
             models.execute_kw(
                 ODOO_DB, uid, ODOO_API_KEY,
