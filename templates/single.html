@@ -166,7 +166,7 @@
                 const res = await fetch('/api/single', { method: 'POST', body: formData });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.error || 'Unknown error');
-                renderResults(data.records, data.tokens_in, data.tokens_out, data.download_url);
+                renderResults(data.records, data.tokens_in, data.tokens_out, data.download_url, data.odoo_sync);
             } catch (err) {
                 showError(err.message);
                 emptyState.classList.remove('hidden');
@@ -177,7 +177,7 @@
             }
         });
 
-        function renderResults(records, tokensIn, tokensOut, downloadUrl) {
+        function renderResults(records, tokensIn, tokensOut, downloadUrl, odooSync) {
             if (!records.length) {
                 showError('No records extracted from this image.');
                 emptyState.classList.remove('hidden');
@@ -221,10 +221,31 @@
                 tbody.appendChild(tr);
             });
 
+            let odooHtml = '';
+            if (odooSync) {
+                const hasErrors = odooSync.errors && odooSync.errors.length > 0;
+                odooHtml = `
+                    <div class="px-3 py-1.5 rounded-lg ${hasErrors ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'} border flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        <span><b>${odooSync.synced_count}</b> synced to Odoo</span>
+                        ${odooSync.skipped_low_confidence ? `<span class="opacity-70">(${odooSync.skipped_low_confidence} skipped)</span>` : ''}
+                        ${odooSync.duplicates_skipped ? `<span class="opacity-70">(${odooSync.duplicates_skipped} dupes)</span>` : ''}
+                    </div>
+                `;
+                if (hasErrors) {
+                    odooHtml += `
+                        <div class="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+                            ${odooSync.errors.map(e => `<div>${e}</div>`).join('')}
+                        </div>
+                    `;
+                }
+            }
+
             stats.innerHTML = `
                 <div class="px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 flex items-center"><span class="opacity-70 mr-1">Rows</span> <b>${records.length}</b></div>
                 <div class="px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 flex items-center"><span class="opacity-70 mr-1">In</span> <b>${tokensIn}</b></div>
                 <div class="px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 flex items-center"><span class="opacity-70 mr-1">Out</span> <b>${tokensOut}</b></div>
+                ${odooHtml}
                 ${downloadUrl ? `<a href="${downloadUrl}" download class="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg hover:from-emerald-400 hover:to-teal-400 transition-colors flex items-center ml-2"><svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Download</a>` : ''}
             `;
             results.classList.remove('hidden');

@@ -217,6 +217,24 @@
         });
 
         function renderResults(data) {
+            let odooCard = '';
+            if (data.odoo_sync) {
+                const sync = data.odoo_sync;
+                const hasErrors = sync.errors && sync.errors.length > 0;
+                odooCard = `
+                    <div class="bg-slate-800/50 rounded-2xl p-4 border ${hasErrors ? 'border-red-500/30' : 'border-emerald-500/30'}">
+                        <div class="text-${hasErrors ? 'red' : 'emerald'}-400 text-xs uppercase tracking-wider font-semibold mb-1 flex items-center">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            Odoo CRM Sync
+                        </div>
+                        <div class="text-2xl font-bold text-white">${sync.synced_count} <span class="text-sm font-normal text-slate-500">synced</span></div>
+                        ${sync.skipped_low_confidence ? `<div class="text-xs text-slate-400 mt-1">${sync.skipped_low_confidence} skipped (low confidence)</div>` : ''}
+                        ${sync.duplicates_skipped ? `<div class="text-xs text-slate-400 mt-1">${sync.duplicates_skipped} duplicates skipped</div>` : ''}
+                        ${hasErrors ? `<div class="text-xs text-red-400 mt-1">${sync.errors.length} error(s)</div>` : ''}
+                    </div>
+                `;
+            }
+
             summary.innerHTML = `
                 <div class="bg-slate-800/50 rounded-2xl p-4 border border-white/5">
                     <div class="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-1">Images</div>
@@ -234,6 +252,7 @@
                     <div class="text-slate-400 text-xs uppercase tracking-wider font-semibold mb-1">Tokens Out</div>
                     <div class="text-2xl font-bold text-white">${data.tokens_out}</div>
                 </div>
+                ${odooCard}
             `;
             downloadBtn.href = data.download_url;
             results.classList.remove('hidden');
