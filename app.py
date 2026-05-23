@@ -2,6 +2,7 @@
 """
 FastAPI frontend for the Hotel Guest Register OCR Pipeline.
 Supports single-image testing and bulk processing.
+NOW WITH: Automatic Odoo CRM Lead sync.
 """
 
 import os
@@ -10,6 +11,7 @@ import base64
 import mimetypes
 import tempfile
 import shutil
+import xmlrpc.client
 from pathlib import Path
 from datetime import datetime
 from io import BytesIO
@@ -26,7 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ─── Configuration ────────────────────────────────────────────────────────────
-app = FastAPI(title="OCR Pipeline Frontend")
+app = FastAPI(title="OCR Pipeline Frontend with Odoo CRM Sync")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -39,6 +41,15 @@ GOOGLE_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-3-flash-preview")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+# ─── Odoo Configuration ───────────────────────────────────────────────────────
+ODOO_URL = os.getenv("ODOO_URL", "").rstrip("/")
+ODOO_DB = os.getenv("ODOO_DB", "")
+ODOO_USERNAME = os.getenv("ODOO_USERNAME", "")
+ODOO_API_KEY = os.getenv("ODOO_API_KEY", "")
+ODOO_SYNC_ENABLED = os.getenv("ODOO_SYNC_ENABLED", "true").strip().lower() == "true"
+
+ODOO_SOURCE_NAME = "Hotel Register (OCR)"
 
 # Prompt template
 EXTRACTION_PROMPT = (
@@ -191,6 +202,136 @@ def process_single_image(image_path: Path) -> dict:
     }
 
 
+# ─── Odoo Integration ─────────────────────────────────────────────────────────
+
+
+def odoo_authenticate() -> tuple[int, object]:
+    """Authenticate with Odoo and return (uid, models proxy)."""
+    if not all([ODOO_URL, ODOO_DB, ODOO_USERNAME, ODOO_API_KEY]):
+        raise ValueError("Odoo credentials not fully configured")
+    
+    common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common")
+    uid = common.authenticate(ODOO_DB, ODOO_USERNAME, ODOO_API_KEY, {})
+    if not uid:
+        raise ValueError("Odoo authentication failed")
+    
+    models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object")
+    return uid, models
+
+
+def get_or_create_odoo_source(models: object, uid: int) -> int:
+    """Get or create the UTM source 'Hotel Register (OCR)' in Odoo."""
+    domain = [[("name", "=", ODOO_SOURCE_NAME)]]
+    source_ids = models.execute_kw(
+        ODOO_DB, uid, ODOO_API_KEY,
+        "utm.source", "search", domain
+    )
+    if source_ids:
+        return source_ids[0]
+    
+    # Create new source
+    new_id = models.execute_kw(
+        ODOO_DB, uid, ODOO_API_KEY,
+        "utm.source", "create", [{"name": ODOO_SOURCE_NAME}]
+    )
+    return new_id
+
+
+def build_lead_description(rec: dict) -> str:
+    """Build a rich description from the OCR record."""
+    lines = ["Guest Register Entry"]
+    if rec.get("age"):
+        lines.append(f"Age: {rec['age']}")
+    if rec.get("nationality"):
+        lines.append(f"Nationality: {rec['nationality']}")
+    if rec.get("permanent_address"):
+        lines.append(f"Permanent Address: {rec['permanent_address']}")
+    if rec.get("from_where_lodger_arrived"):
+        lines.append(f"Arrived From: {rec['from_where_lodger_arrived']}")
+    if rec.get("date_and_time_of_arrival"):
+        lines.append(f"Arrival: {rec['date_and_time_of_arrival']}")
+    if rec.get("reason_of_visit"):
+        lines.append(f"Reason: {rec['reason_of_visit']}")
+    if rec.get("date"):
+        lines.append(f"Register Date: {rec['date']}")
+    lines.append(f"Confidence: {rec.get('confidence', 'unknown')}")
+    return "\n".join(lines)
+
+
+def sync_records_to_odoo(records: list[dict]) -> dict:
+    """Push records to Odoo CRM. Returns sync summary."""
+    summary = {
+        "synced_count": 0,
+        "skipped_low_confidence": 0,
+        "duplicates_skipped": 0,
+        "errors": [],
+    }
+
+    if not ODOO_SYNC_ENABLED:
+        summary["errors"].append("Odoo sync is disabled via ODOO_SYNC_ENABLED")
+        return summary
+
+    try:
+        uid, models = odoo_authenticate()
+        source_id = get_or_create_odoo_source(models, uid)
+    except Exception as exc:
+        summary["errors"].append(f"Odoo connection failed: {exc}")
+        return summary
+
+    for rec in records:
+        try:
+            # Skip low confidence
+            confidence = str(rec.get("confidence", "")).strip().lower()
+            if confidence == "low":
+                summary["skipped_low_confidence"] += 1
+                continue
+
+            name = str(rec.get("name", "")).strip()
+            phone = str(rec.get("mobile_no", "")).strip()
+
+            if not name or not phone:
+                summary["skipped_low_confidence"] += 1
+                continue
+
+            # Deduplication: check if lead with same name + phone exists
+            domain = [[
+                ("name", "=", name),
+                ("phone", "=", phone),
+            ]]
+            existing = models.execute_kw(
+                ODOO_DB, uid, ODOO_API_KEY,
+                "crm.lead", "search", domain
+            )
+            if existing:
+                summary["duplicates_skipped"] += 1
+                continue
+
+            # Create lead
+            lead_vals = {
+                "name": name,
+                "phone": phone,
+                "type": "lead",
+                "source_id": source_id,
+                "description": build_lead_description(rec),
+            }
+
+            # Optional: map address to street if present
+            address = str(rec.get("permanent_address", "")).strip()
+            if address:
+                lead_vals["street"] = address
+
+            models.execute_kw(
+                ODOO_DB, uid, ODOO_API_KEY,
+                "crm.lead", "create", [lead_vals]
+            )
+            summary["synced_count"] += 1
+
+        except Exception as exc:
+            summary["errors"].append(f"Row sync failed for '{rec.get('name', 'unknown')}': {exc}")
+
+    return summary
+
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -242,6 +383,10 @@ def api_single(image: UploadFile = File(...)):
         wb.save(download_path)
         
         result["download_url"] = f"/download/{download_path.name}"
+        
+        # ─── Odoo Sync ────────────────────────────────────────────────────────
+        odoo_summary = sync_records_to_odoo(result["records"])
+        result["odoo_sync"] = odoo_summary
         
         return {"success": True, **result}
     except Exception as exc:
@@ -299,6 +444,9 @@ def api_bulk(images: list[UploadFile] = File(...)):
         download_path = download_dir / f"bulk_extracted_{timestamp}.xlsx"
         wb.save(download_path)
 
+        # ─── Odoo Sync ────────────────────────────────────────────────────────
+        odoo_summary = sync_records_to_odoo(all_records)
+
         return {
             "success": True,
             "total_images": len(images),
@@ -308,6 +456,7 @@ def api_bulk(images: list[UploadFile] = File(...)):
             "tokens_in": total_tokens_in,
             "tokens_out": total_tokens_out,
             "download_url": f"/download/{download_path.name}",
+            "odoo_sync": odoo_summary,
         }
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -328,4 +477,5 @@ if __name__ == "__main__":
     import uvicorn
     print(f"Starting OCR Frontend on http://127.0.0.1:8000")
     print(f"API Mode: {API_MODE}")
+    print(f"Odoo Sync Enabled: {ODOO_SYNC_ENABLED}")
     uvicorn.run(app, host="127.0.0.1", port=8000)
